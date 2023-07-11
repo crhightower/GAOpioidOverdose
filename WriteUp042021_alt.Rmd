@@ -1,0 +1,396 @@
+---
+title: "Assessing County-level Vulnerability of Opioid Overdose Mortality in Georgia"
+author: "Caleb Hightower, Lance A. Waller"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+#libraries
+library(tidyverse)
+library(dplyr)
+library(table1)
+library(arsenal)
+library(ggplot2)
+library(factoextra)
+library(psych)
+library(GPArotation)
+library(nFactors)
+library(car)
+library(corrplot)
+library(lares)
+
+library(kableExtra)
+library(sf)
+#library(raster)
+library(RColorBrewer)
+
+#useful operators
+'%!in%' <- function(x,y)!('%in%'(x,y))
+outersect <- function(x, y) {
+  sort(c(setdiff(x, y),
+         setdiff(y, x)))
+}
+```
+
+## Introduction
+
+In the last 15 years, the United States has witnessed a substantial increase in opioid use and overdose mortality stemming largely from opioid over-prescribing and the increased availability of synthetic opioids like fentanyl (Guy et al., 2017; Vadivelu et al., 2018; Beletsky & Davis, 2017).  Approximately 47,000 people in the US died from opioid overdoses in 2018 (NIH, 2020).  It is estimated that by 2025, the annual number of deaths attributable to opioids will be approximately 82,000, and a total of 700,000 people in the US will have died from opioid overdoses between 2016 and 2025 (Chen et al., 2019).  The opioid epidemic has also led to an increase in injection drug use (IDU).  IDU is a related to a number of bloodborne infectious diseases, including acute hepatitis C virus (HCV) and human immunodeficiency virus (HIV), where rural areas, in particular, have carried a higher burden of disease (Mack & Ballesteros, 2017).  One notable example of an IDU-related disease outbreak happened in Scott county, Indiana, where between 2014 and 2015, 181 individuals in a county of 24,000 were diagnosed with HIV, most as result of injection from the opioid oxymorphone (Van Handel et al., 2016; Peters et al., 2016).  Lack of access to sterile equipment, substance abuse treatment providers, and HIV services exacerbated this outbreak severely (Peters et al., 2016).  Additionally, placing this outbreak in its ecologic context illustrates that the socioeconomic conditions in which the outbreak occurred can be found in numerous other counties in the US (Van Handel et al., 2016).  Assessing the vulnerability of these areas can be a crucial component in the prevention and mitigation of opioid overdose mortality and IDU-related disease. 
+
+Aggregate indices of vulnerability and resiliency have become a topic of interest to state departments of health.  A vulnerability assessment can help ascertain which geographic regions, such as census tracts, zip code tabulation areas (ZCTA), or counties, might be vulnerable or resilient to potentially detrimental health outcomes, such as a natural disaster or a disease outbreak.  The Centers for Disease Control and Prevention (CDC) provides its own Social Vulnerability Index (SVI) every two years based on 15 variables obtained from the US Census.  These variables are sorted into four themes: socioeconomic status, household composition, race/ethnicity/language, and housing/transportation (CDC, 2020).  In response to Scott county outbreak, the CDC created a nationwide vulnerability assessment for HIV and acute HCV related to IDU (Van Handel et al., 2016).  Recent literature has also demonstrated the need for tailored vulnerability assessments not only to specific health outcomes but also specific geographies.  State-specific assessments of drug-related vulnerability have been conducted in states such as Tennessee, Utah, South Dakota, Louisiana, and Georgia in an effort to include state-specific indicators of drug-related harms and create targeted interventions on a local level (Rickles et al., 2017; Sharareh et al., 2020; Wesner et al., 2020; PRG, 2019; GADPH, 2018).  However, methods of variable identification, data collection, data reduction, and vulnerability score ranking vary and are generally underdeveloped. 
+
+In this paper, we want to investigate opioid overdose mortality in Georgia counties by utilizing an expanded list of potential indicator variables, which include distinct local data, as compared to the national CDC vulnerability assessment.  In Georgia, 63.2 opioid prescriptions were written per 100 persons in 2018, higher than the national rate of 51.4 (NIH, 2020).  Although prescription-drug-related deaths in Georgia decreased in 2018, the number of heroin-related deaths continued to rise (NIH, 2020).  Synthetic opioid deaths also decreased in 2018, but recent fears of synthetic opioid deaths have been renewed as a result of the COVID-19 pandemic’s effects on the opioid drug market and the increasing availability of fentanyl (NIH, 2020; Wakeman, Green, & Rich, 2020).  In addition to assessing county-level vulnerability opioid overdose mortality, we also want to investigate how this methodology can be applied for future vulnerability assessments and critique current methods of data dimension reduction.
+
+
+## Methods
+### Study Design
+
+Based on previous research by CDC and other recent vulnerability assessments of acute HCV and opioid-related harms, we chose an ecologic study design for all 159 counties in Georgia (Van Handel et al., Rickles et al., 2017).  
+
+### Primary Outcome
+
+We were interested in assessing the vulnerability of counties in Georgia to opioid overdose mortality.  This outcome was measured using counts of fatal opioid overdoses in 2019 by ICD-10 codes (T40.0, T40.1, T40.2, T40.3, T40.4, and T40.6), which include prescription opioid pain relievers, opioids to treat addiction, heroin, opium, and synthetic opioids.  This data is publicly available and provided by Georgia Department of Public Health’s Online Analytical Statistical Information System (OASIS).
+
+### Potential Indicator Variables
+
+Possible county-level indicators of opioid overdose mortality were based largely on previously identified indicators related to IDU listed by CDC, Rickles et al. (2017), and the Policy & Research Group (2019) (Van Handel et al., 2016).  Data were collected from 9 sources: the 2019 American Community Survey (ACS), CDC, County Health Rankings, Georgia Department of Public Health (GADPH), Centers for Medicare and Medicaid Services (CMS), AIDS Vu, Drug Enforcement Agency (DEA), Substance Abuse and Mental Health Services (SAMHSA), and Association of Religion Data Archives (ARDA), referenced in the first table of the addendum.  The study sample consisted of 159 aggregate estimates from the residential populations in each county.  A total of 89 variables were collected.  All data cleaning, data reduction, and analyses were conducted using R version 4.0.4.
+Estimates for population and income were log transformed.  Rates were calculated per 100,000 persons using the ACS population estimates, with the exception of teen births, injury-related deaths, church adherence, and opioid dispensing, in which no calculations were needed.  National provider information was used to indicate access to provider services.  However, county information was not provided in this data, only addresses and zip codes.  To convert these addresses to counties, we subset the data by state and geocoded provider practice location addresses using three methods.  First, if a zip code tabulation area (ZCTA) was contained fully within a county, the county would be assigned directly to that zip code using ArcMap.  The remaining data were then geocoded sequentially through R packages “tidygeocoder”, which utilizes US Census data, and “ggmap”, which utilizes Google maps, respectively. That is, if there addresses not geocoded through "tidygeocoder," they would then be geocoded through "ggmap."  The geocode coverage was around 99%, and geographic coordinates were converted to counties.  Provider addresses that were geocoded as outside Georgia were removed.
+
+Small counts of disease, usually less than 5 cases, are often censored to protect the identity of individuals in counties with smaller populations.  In these cases, we assumed the number of censored cases to be uniform from 1 to 4 and imputed these values with 2.5, the mean.  We did this for counts of chlamydia, gonorrhea, syphilis, and HIV.  In the case of Neonatal Abstinence Syndrome, counts less than 10 were censored, so we imputed these values with 5. 
+
+### Dimension Reduction
+
+Given the high-dimensional nature of the data with 159 counties and 89 possible indicators, traditional multivariate regression techniques of variable selection might not be adequate in helping us select a parsimonious model with meaningful predictors.  It would be useful to utilize other dimension reduction techniques in addressing relatedness and multicollinearity among plausible predictors.  Following the example of previous vulnerability assessment literature, we conducted a stepwise dimension reduction process consisting of an empirical review, principal component analysis, factor analysis, and an examination of the correlation matrix from the remaining variables (Rickles et al., 2017; Sharareh et al., 2020; PRG, 2019).  After an empirical review, we removed 11 variables that were too similar to the outcome (for example, heroin deaths).  We also removed county name, Federal Information Processing Standards (FIPS) codes, and opioid overdose mortality, our outcome.  We then conducted a principal component analysis, which determined that 69% of the data variance was explained in the first 5 principal components (see Figure 1).  17 variables were removed which had no absolute component correlation greater than 0.5 in any of the 5 components (Joliffe, 2002).  Minimum residual factor analysis was then used on the remaining predictors.  Parallel analysis determined that 5 factors, accounting for 80% of the total variance, were sufficient in representing the remaining possible indicators (see Figure 2).  Similarly, 6 variables were removed which had no absolute factor loading greater than 0.5.  Both PCA and factor analysis were performed using the R package “psych.”
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, out.width="75%", fig.cap="PCA", fig.align="center"}
+#import predictors from data cleaning
+setwd("H:/chight3/SVI")
+pospred <- read.csv("PossiblePredictors.csv", header = T)
+
+##########################################################################
+#Principal Component Analysis
+##########################################################################
+
+#PCA is numeric only so we will drop categorical variables
+numpred <- pospred %>% select_if(is.numeric) %>% select(-FIPS, -population, -starts_with("death"))
+#also it can't take NA values so we have to use an imputation methdo or drop them
+numpred <- na.omit(numpred) #drops 7 counties
+
+#write.csv(numpred, "SASPCA.csv", row.names = F)
+
+#look at principal components after centering and standardizing
+#couple of unique issues:
+#PCA is sensitive to scaling and 
+#sensitive to missing values: how do we deal with these when we only have 159 counties? i.e. gappy data
+opioidPCA <- prcomp(numpred, center = T, scale. = T)
+
+fviz_eig(opioidPCA)
+
+#elbow suggests 2 PCs should do
+#6 if we're really picky with it, accounts for 70% of variance
+#note the rotations aren't correlations, but are just eigenvectors of the covariance matrix
+ncomp = 5
+
+#scratch everything above, we're going to use the psych package to reduce now
+#use psych package to recreate SAS's "Factor patterns" component matrix
+
+opioidPCA <- psych::principal(numpred, rotate="none", nfactors=ncomp, covariance=TRUE)
+x <- opioidPCA$loadings
+
+#convert the loadings matrix to data frame
+cutoff <- 0.5 # (the default for the `print.loadings()` function)
+Lambda <- unclass(x)
+p <- nrow(Lambda)
+fx <- setNames(Lambda, NULL)
+fx[abs(Lambda) < cutoff] <- NA_real_
+fx <- as.data.frame(fx)
+
+#literature suggested eliminating variables that didn't correlate higher than 0.5 in any component
+#want to remove loading if less than 0.5
+PCAreduce <- fx %>% filter(rowSums(is.na(.)) != ncol(.))
+
+#which variables were removed
+PCAreduce_variables <- outersect(rownames(PCAreduce), colnames(numpred))
+```
+
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, results='hide', out.width="75%", fig.cap="Factor Analysis", fig.align="center"}
+#############################################
+#Factor Analysis
+#############################################
+
+#subset data
+numpred2 <- pospred %>% select(-all_of(PCAreduce_variables)) %>%
+                        select_if(is.numeric) %>% 
+                        select(-FIPS, -population, -starts_with("death"))
+numpred2 <- na.omit(numpred2)
+
+#other methods
+fa.parallel(numpred2, fm="minres", fa="fa") #6 factors
+```
+
+### Statistical Modeling and Multicollinearity
+
+Since opioid overdose mortality was indicated with count data, we were interested in fitting a generalized linear model (GLM) with a Poisson distribution, log link, and an offset for log population.  However, we conducted a deviance test to examine goodness of fit (p = 0.049), which suggested that there was a lack of fit under a Poisson assumption and, therefore, overdispersion in the data.  A GLM with a negative binomial distribution, a log link, and an offset for log population was instead fit to address this overdispersion.  
+
+We then identified multicollinearity among plausible predictors by calculating the generalized variance-inflation factors (GVIF) for each variable in our model and removing the variable that had the highest GVIF greater than 10.  We repeated this process after each variable was removed and recalculated the GVIFs.  32 variables were removed that had GVIFs greater than 10, leaving us with 20 possible predictors.  Lastly, stepwise, bidirectional variable selection was performed using Akaike information criteria (AIC). 
+
+### Vulnerability Score Ranking
+
+The vulnerability index for opioid overdose mortality was created by multiplying the coefficients from the significant predictors in our final model, except the intercept, by the respective county values.  We then ranked the counties from lowest to highest, where lower values indicated higher levels of vulnerability, and transformed the scores so that they took on values from 0 to 1, where 0 indicated lowest vulnerability and 1 indicated highest vulnerability.  This was done to increase the interpretability of the scores and make the index more comparable with other known vulnerability indices, such as CDC’s Social Vulnerability Index.
+
+## Results
+```{r, eval=F, results='asis'}
+setwd("H:/chight3/SVI")
+vulnerability <- read.csv("vulnerability.csv", header = T)
+
+#labels
+label(vulnerability$population) <- "Population size"
+label(vulnerability$pctnonhiswhite) <- "Percentage of population non-Hispanic White"
+label(vulnerability$eralldrugR) <- "Rate of ER and inpatient visits related to all drugs per 100000"
+label(vulnerability$erallopioidR) <- "Rate of ER and inpatient visits realated to all opioids per 100000"
+label(vulnerability$SpecialtyCareR) <- "Rate of specialty Care providers per 100000"
+
+table <- tableby(~., data = select(vulnerability, -County, -vulnerability, -rank.vuln, -norm.vuln))
+summary(table)
+```
+
+Our final model yielded 4 significant predictors of opioid overdose mortality: the percentage of population that is non-Hispanic white, rate of ER and inpatient visits related to all drugs per 100,000 persons, rate of ER and inpatient visits related to all opioids per 100,000 persons, and the rate of specialty care providers per 100,000 persons.  The regression coefficients and their significance can be found in Table 1.
+
+```{r, eval=TRUE, results='asis'}
+setwd("H:/chight3/SVI")
+vulnerability <- read.csv("vulnerability.csv", header = T)
+nb <- MASS::glm.nb(deathallopioid~ pctnonhiswhite + eralldrugR + erallopioidR + SpecialtyCareR + offset(log(population)),
+                             data = vulnerability)
+
+Coefficient <- nb$coefficients
+SE <- c(0.1912, 0.0025, 0.0009, 0.0026, 0.0063)
+Pvalue <- c("<0.001", "<0.001", "<0.001", "<0.001", "<0.01")
+table3 <- data.frame(Coefficient, SE, Pvalue)
+row.names(table3) <- c("Intercept", "Percentage of population non-Hispanic White",
+                       "Rate of ER and inpatient visits related to all drugs per 100000",
+                       "Rate of ER and inpatient visits realated to all opioids per 100000",
+                       "Rate of specialty Care providers per 100000")
+table3 %>% kbl(label = "Table 3", caption = "Negative Binomial regression results", col.names = c("Coefficient", "Std. error", "P-Value"), booktabs = T)
+```
+
+Although vulnerable counties are found all over the state, we find that they are often clumped together or adjacent to other vulnerable counties (Figure 3).  Of the top quintile of vulnerable counties, 17 counties are located in north Georgia (including Catoosa, Dade, and Walker county, 3 counties which comprise the Georgia side of the Chattanooga metropolitan statistical area), 6 in central Georgia (including Richmond county, which contains Augusta, and Harris county, which includes part of the Columbus metropolitan statistical area), and 8 in south Georgia.  
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, results='hide', out.width="75%", fig.cap="Vulnerability Index", fig.align="center"}
+###################
+#Map Vulnerability
+###################
+setwd("H:/chight3/SVI")
+GA.vulner <- vulnerability %>%
+             rename(LOCATION = County) %>%
+             mutate(opioidR = deathallopioid/population)
+
+#read in the shape file with sf package
+GA.shp <- st_read(dsn = "Georgia_COUNTY", layer = "SVI2018_GEORGIA_county")
+
+Vulnerability.shp <- merge(GA.shp, GA.vulner, by = "LOCATION")
+
+qtiles <- 5
+breaks <- c(0, 0.202531646, 0.405063291, 0.607594937, 0.810126582, 1)
+
+pal <- brewer.pal(qtiles, "OrRd") # we select 5 colors from the palette, color brewer package
+class(pal)
+
+#create choropleth maps for county vulnerability for overall and each theme
+plot(Vulnerability.shp["norm.vuln"], 
+     main = "Vulnerability Index for Opioid Overdose by County in GA", 
+     breaks = breaks, nbreaks = qtiles,
+     pal = pal)
+```
+
+Only 2 of the top 31 counties in CDC’s Social Vulnerability Index overlapped with our index, namely, Clay and Candler county.  An assessment of county-level vulnerability to opioid overdose was also conducted by GADPH in 2018.  While overall regions of vulnerability tended to overlap with this previous assessment, for example north Georgia and southeast Georgia, only 9 of the top 31 counties identified by the GADPH assessment overlapped with our assessment: Bartow, Brantley, Fannin, Pierce, Towns, Haralson, Lincoln, Ware, and Gilmer county.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE, results='hide', out.width="100%", fig.cap="Overall SVI", fig.align="center"}
+#read in the shape file with sf package
+setwd("H:/chight3/SVI")
+GA.shp <- st_read(dsn = "Georgia_COUNTY", layer = "SVI2018_GEORGIA_county")
+
+pal <- brewer.pal(5, "OrRd") # we select 7 colors from the palette, color brewer package
+class(pal)
+
+#create choropleth maps for county vulnerability for overall and each theme
+# plot(GA.shp["RPL_THEMES"], 
+#      main = "Overall SVI Score by County in GA", 
+#      breaks = "quantile", nbreaks = 5,
+#      pal = pal)
+```
+
+## Discussion
+This assessment showcases the importance of adapting and refining current vulnerability index methodology for specific outcomes and specific geographies.  Solely using CDC’s Social Vulnerability Index as a reference for opioid overdose mortality, for example, yields a very different map of vulnerability, especially north Georgia.  Like previous literature, we have expanded on the method that Van Handel et al. (2016) developed to identify vulnerable counties in the US to rapid dissemination of HIV and HCV by localizing the geography of interest to the state level, widening the scope of possible indicators, and, additionally, altering the outcome of interest to opioid overdose mortality.  As a result, we have identified counties in Georgia that may be more susceptible to fatal opioid overdoses.  
+
+The indicators in our final model (Table 1) can be helpful in understanding, predicting, and preventing opioid overdose mortality in Georgia.  Opioid-related harms, especially in Georgia, have been more severe in predominantly white communities, which our model reflects (KFF, 2019; Vadivelu et al., 2018).  Local rates of ER and inpatient drug-related visits, specifically those attributable to opioids, have potential on an administrative level to predict changes in fatal opioid overdoses.  One serious limitation of ER data is that rural counties often lack emergency care providers, forcing individuals to seek emergency care in adjacent counties or to forgo emergency care altogether.  This could lead to underrepresenting the vulnerability of rural counties, which are generally more at risk for opioid-related harms (Mack & Ballesteros, 2017).  Generally, interpretation of these model coefficients needs to be done with caution.  It is counterintuitive to assume that the count of opioid overdose mortality decreases as the rate of ER and inpatient visits related to all drugs in a county increases or as the rate of specialty care providers increases, as our model suggests. As Sharareh et al. (2020) noted, county-level coefficients may instead be proxy indicators for other relationships that were either not available, not measurable, or not included in the model.  Additional research into these indicators and their relationship to opioid overdose deaths would be helpful in better characterizing vulnerability to opioid overdose mortality.
+
+This vulnerability information can be utilized on a state and local level to reduce vulnerability to fatal opioid overdoses by expanding prevention and mitigation resources in identified at-risk counties.  This includes expanding access to emergency care and substance use care and ensuring adequate access to medication-assisted treatment, such as buprenorphine/naloxone to prevent an overdose and naloxone in the case of an overdose.  Additionally, the opioid epidemic has the potential to change rapidly.  Although the number of opioids prescribed in Georgia is decreasing, the number of opioid-related deaths is increasing, and newfound fears have arisen regarding COVID-19’s effect on the illicit opioid markets, particularly the possible increased accessibility of stronger synthetic opioids (Wakeman, Green, & Rich, 2020).  
+
+The results of this vulnerability assessment are only generalizable to Georgia in 2019, but the method used in this paper, in tandem with the methods of similar vulnerability literature, is applicable to future development of aggregate indices of vulnerability and resiliency, especially within the context of administrative data.  Employing the methods used here to create routine assessments of county vulnerability to fatal opioid overdoses would also help us ascertain whether vulnerability indicators and vulnerable counties in Georgia remain consistent over time or change as the epidemic evolves.  Moreover, all data obtained and utilized in this paper were publicly available. Anyone could use the plausible indicators that were gathered to further investigate fatal opioid overdoses in Georgia.  Additionally, future researchers could alter the list of plausible predictors to investigate other vulnerability outcomes on a county level in Georgia, like vulnerability to tornado deaths.  In the future, we may also want to consider spatial autocorrelation among counties, especially since it appears that vulnerable counties might cluster together.  Alternate approaches could also be explored regarding dimension reduction techniques, such as penalized regression and random forest.
+
+## Limitations
+When comparing the results of this paper to the assessment done by GADPH in 2018, some considerations should first be noted.  First, vulnerability was assessed at two different time periods in the opioid epidemic.  The GADPH assessment in 2018 used data from 2016-2017, whereas most of our data was from 2019.  Second, the methods in the GADPH assessment were not explicit but were inspired by Van Handel et al. (2016).  This makes a comparison of the methods used between assessments difficult, and our work should be viewed as a separate assessment rather than a reassessment.  Third, one of the primary outcomes for the GADPH assessment was nonfatal opioid overdoses rather than fatal opioid overdoses, the primary outcome in this assessment.
+
+It should be noted that the vulnerable counties surrounding Chattanooga, Augusta, and Columbus are similar in that they all lie on the border of other states: Tennessee, South Carolina, and Alabama, respectively.  In future research, it might be beneficial to include the surrounding border counties create a more holistic view of the vulnerability around these metropolitan statistical areas and it how they affect counties in Georgia.  The difficulty in this approach is that administrative data is often provided on a state-by-state basis and may be different across states.  
+
+Additionally, opioid overdose mortality was mapped using the residency of the deceased individuals rather than the location of death.  This is useful within the context of investigating vulnerability through the lens of socioeconomic conditions; however, this might not accurately characterize opioid use, and using death location might help answer different questions regarding the opioid epidemic in Georgia.	 
+
+Other limitations include imputation.  Although chlamydia, gonorrhea, syphilis, HIV, and Neonatal Abstinence Syndrome were not included in the final model, there are limitations in imputing censored low counts, which may have contributed to their elimination during the data reduction process.  
+
+Lastly, we were unable to obtain acute HCV data for Georgia counties.  This data would have been helpful in understanding vulnerability to injection drug use-related infectious diseases in Georgia and helpful in comparing identified indicators to previous vulnerability assessment literature, most of which focused on acute HCV.
+
+## References
+
+Beletsky, L., & Davis, C. S. (2017). Today’s fentanyl crisis: Prohibition’s Iron Law, revisited. International Journal of Drug Policy, 46, 156–159. 
+
+CDC’s Social Vulnerability Index (SVI). (2021, January 19). https://www.atsdr.cdc.gov/placeandhealth/svi/index.html
+
+Chen, Q., Larochelle, M. R., Weaver, D. T., Lietz, A. P., Mueller, P. P., Mercaldo, S., Wakeman, S. E., Freedberg, K. A., Raphel, T. J., Knudsen, A. B., Pandharipande, P. V., & Chhatwal, J. (2019). Prevention of Prescription Opioid Misuse and Projected Overdose Deaths in the United States. JAMA Network Open, 2(2), e187621.
+
+Guy, G. P., Zhang, K., Bohm, M. K., Losby, J., Lewis, B., Young, R., Murphy, L. B., & Dowell, D. (2017). Vital Signs: Changes in Opioid Prescribing in the United States, 2006–2015. MMWR. Morbidity and Mortality Weekly Report, 66(26), 697–704.
+
+Joliffe I. (2002). Principal component analysis (2nd ed.). Springer.
+
+KFF. Opioid Overdose Deaths by Race/Ethnicity. (2021, March 16). https://www.kff.org/other/state-indicator/opioid-overdose-deaths-by-raceethnicity/
+
+Mack, K. A., Jones, C. M., & Ballesteros, M. F. (2017). Illicit Drug Use, Illicit Drug Use Disorders, and Drug Overdose Deaths in Metropolitan and Nonmetropolitan Areas—United States. Morbidity and Mortality Weekly Report. Surveillance Summaries (Washington, D.C.: 2002), 66(19), 1–12.
+
+NIH (2020, April 3). Georgia: Opioid-Involved Deaths and Related Harms. National Institute on Drug Abuse. https://www.drugabuse.gov/drug-topics/opioids/opioid-summaries-by-state/georgia-opioid-involved-deaths-related-harms
+
+Peters, P. J., Pontones, P., Hoover, K. W., Patel, M. R., Galang, R. R., Shields, J., Blosser, S. J., Spiller, M. W., Combs, B., Switzer, W. M., Conrad, C., Gentry, J., Khudyakov, Y., Waterhouse, D., Owen, S. M., Chapman, E., Roseberry, J. C., McCants, V., Weidle, P. J., … Duwve, J. M. (2016). HIV Infection Linked to Injection Use of Oxymorphone in Indiana, 2014–2015. New England Journal of Medicine, 375(3), 229–239. 
+
+PRG (2019). Jurisdiction-level Vulnerability Assessment. Retrieved February 22, 2021, from https://policyandresearch.com/wp-content/uploads/2020/01/OPH_OVA.pdf
+
+Sharareh, N., Hess, R., White, S., Dunn, A., Singer, P. M., & Cochran, J. (2020). A vulnerability assessment for the HCV infections associated with injection drug use. Preventive Medicine, 134, 106040.
+
+Vadivelu, N., Kai, A. M., Kodumudi, V., Sramcik, J., & Kaye, A. D. (2018b). The Opioid Crisis: A Comprehensive Overview. Current Pain and Headache Reports, 22(3), 16. 
+
+Van Handel, M. M., Rose, C. E., Hallisey, E. J., Kolling, J. L., Zibbell, J. E., Lewis, B., Bohm, M. K., Jones, C. M., Flanagan, B. E., Siddiqi, A.-E.-A., Iqbal, K., Dent, A. L., Mermin, J. H., McCray, E., Ward, J. W., & Brooks, J. T. (2016). County-level Vulnerability Assessment for Rapid Dissemination of HIV or HCV Infections among Persons who Inject Drugs, United States. Journal of Acquired Immune Deficiency Syndromes (1999), 73(3), 323–331. 
+
+Wakeman, S. E., Green, T. C., & Rich, J. (2020). An overdose surge will compound the COVID-19 pandemic if urgent action is not taken. Nature Medicine, 26(6), 819–820. 
+
+Wesner, C. A., Zhang, W., Melstad, S., Ruen, E., Deffenbaugh, C., Gu, W., & Clayton, J. L. (2020). Assessing County-Level Vulnerability for Opioid Overdose and Rapid Spread of Human Immunodeficiency Virus and Hepatitis C Infection in South Dakota. The Journal of Infectious Diseases, 222(Supplement_5), S312–S321.
+
+Zibbell, J. E., Asher, A. K., Patel, R. C., Kupronis, B., Iqbal, K., Ward, J. W., & Holtzman, D. (2017). Increases in Acute Hepatitis C Virus Infection Related to a Growing Opioid Epidemic and Associated Injection Drug Use, United States, 2004 to 2014. American Journal of Public Health, 108(2), 175–181. 
+
+## Addendum
+
+Advisor Lance Waller has guided me on all methods and ideas for this paper.  The only serious structural issue he has had thus far has related to placement of tables and sizes of figures, such as moving the large demographic table to the addendum.
+
+**Total possible indicators**
+
+```{r, eval=TRUE, results='asis'}
+#########################################
+#Descriptive table and maps
+#########################################
+
+#final <- possible.pred13
+#write.csv(final, "PossiblePredictors.csv", row.names = F)
+
+setwd("H:/chight3/SVI")
+final <- read.csv("PossiblePredictors.csv", header = T)
+
+#table1 package
+#labels
+label(final$population) <- "Population size"
+label(final$incomepercap)   <- "Per capita income"
+label(final$logincomepercap)    <- "Per capita income (log)"
+label(final$gini) <- "Gini coefficient"
+label(final$pctuninsured) <- "Percentage uninsured"
+label(final$pctnodiploma) <- "Percentage with no high school diploma"
+label(final$pctpoverty) <- "Percentage living in poverty"
+label(final$pctnonhiswhite) <- "Percentage of population non-Hispanic White"
+label(final$pctunemployed) <- "Percentage of population unemployed"
+label(final$pctdisability) <- "Percentage of population with a disability"
+label(final$pctfemalehouse) <- "Percentage of female-headed households"
+label(final$pctnevermarried) <- "Percentage of population never married"
+label(final$pctvehicle) <- "Percentage with vehicle access"
+label(final$tothousing) <- "Housing units"
+label(final$totoccupied) <- "Occupied housing units"
+label(final$totvacant) <- "Vacant housing units"
+label(final$mobilehome) <- "Mobile homes"
+label(final$mobilehomeP) <- "Percentage of mobile homes"
+label(final$phone) <- "Home without phone service"
+label(final$phoneP) <- "Percentage of homes without phone service"
+label(final$crowded) <- "Crowded housing units"
+label(final$prematuredeaths) <- "Premature deaths"
+label(final$potlifelost) <- "Years of potential life lost"
+label(final$poorhealth) <- "Adults reporting poor/fair health"
+label(final$poorhealthdays) <- "Poor physical health days"
+label(final$mentaldays) <- "Poor mental health days"
+label(final$injurydeaths) <- "Injury-related deaths"
+label(final$injurydeathrate) <- "Rate of injury-related deaths"
+label(final$smokers) <- "Percentage of adults who smoke"
+label(final$teenbirth) <- "Teen birth rate per 1000"
+label(final$reladherance) <- "Total church adherents"
+label(final$reladherancerate) <- "Rate of church adherence per 1000"
+label(final$urbanrural) <- "NCHS Urban-Rural status"
+label(final$BuprenorphineProviders) <- "Buprenorphine providers"
+label(final$BupProviderspercap) <- "Per capita buprenorphine providers"
+label(final$HIDTA) <- "High Intensity Drug Trafficking Area"
+label(final$pop18to29) <- "Population aged 18-29"
+label(final$pctpop18to29) <- "Percentage of population aged 18-29"
+label(final$pop18to29) <- "Population aged 18-29"
+label(final$popdensity) <- "Population Density"
+label(final$logpopdensity) <- "Population Density, log"
+label(final$popdecline) <- "Population Decline 2011-2019"
+label(final$BuprenorphineProviders) <- "Buprenorphine Providers"
+label(final$deathalldrug) <- "Deaths related to all drugs"
+label(final$deathallopioid) <- "Deaths related to all opioids"
+label(final$deathheroin) <- "Deaths related to heroin"
+label(final$deathnatural) <- "Deaths related to natural, semi-synthetic, and synthetic opioids" #by residence
+label(final$deathsynthetic) <- "Deaths related to synthetic opioids other than methadone"
+label(final$deathmethadone) <- "Deaths related to methadone"
+label(final$deathalldrugR) <- "Rate of death related to all drugs"
+label(final$deathallopioidR) <- "Rate of death related to all opioids"
+label(final$deathheroinR) <- "Rate of death related to heroin"
+label(final$deathnaturalR) <- "Rate of death related to natural, semi-synthetic, and synthetic opioids" #by residence
+label(final$deathsyntheticR) <- "Rate of death related to synthetic opioids other than methadone"
+label(final$deathmethadoneR) <- "Rate of death related to methadone"
+label(final$eralldrug) <- "ER and inpatient visits related to all drugs"
+label(final$erallopioid) <- "ER and inpatient visits realated to all opioids"
+label(final$erheroin) <- "ER and inpatient visits related to heroin"
+label(final$eralldrugR) <- "Rate of ER and inpatient visits related to all drugs"
+label(final$erallopioidR) <- "Rate of ER and inpatient visits realated to all opioids"
+label(final$erheroinR) <- "Rate of ER and inpatient visits related to heroin"
+label(final$nas) <- "Count of Neonatal Abstinence Syndrome"
+label(final$std) <- "Chlamydia and Gonorrhea Cases"
+label(final$syphilis) <- "Syphilis (all forms) Cases"
+label(final$stdR) <- "Rate Chlamydia and Gonorrhea"
+label(final$syphilisR) <- "Rate of Syphilis (all forms)"
+label(final$HIVnewcases) <- "New HIV cases"
+label(final$HIVprevalence) <- "HIV prevalent cases"
+label(final$HIV_IDU) <- "HIV cases related to injection drug use"
+label(final$HIVincidence) <- "Rate of HIV Incidence per 100000"
+label(final$HIVprevalenceR) <- "Rate of HIV Prevalence per 100000"
+label(final$HIV_IDUR) <- "Rate of HIV cases related to injection drug use per 100000"
+label(final$prep) <- "Number of PrEP users"
+label(final$prepR) <- "Rate of PrEP users per 100000"
+label(final$Opioid.Dispensing.Rate.per.100) <- "Opioid dispensing rate per 100"
+label(final$overlap.opioid) <- "% patient days with overlapping opioid prescriptions"
+label(final$overlap.benzo) <- "% patient days with overlapping opioid and benzodiazepine prescriptions"
+label(final$violentcrimes) <- "Count of violent crimes"
+label(final$propertycrimes) <- "Count of property crimes"
+label(final$MentalHealthProviders) <- "Mental health services"
+label(final$PrimaryCareProviders) <- "Primary care providers"
+label(final$SpecialtyCareProviders) <- "Specialty Care providers"
+label(final$UrgentCareProviders) <- "Urgent care providers"
+label(final$SubstanceUseProviders) <- "Substance use services"
+label(final$MentalHealthR) <- "Rate of mental health services per 100000"
+label(final$PrimaryCareR) <- "Rate of primary care providers per 100000"
+label(final$SpecialtyCareR) <- "Rate of specialty Care providers per 100000"
+label(final$UrgentCareR) <- "Rate of urgent care providers per 100000"
+label(final$SubstanceUseR) <- "Rate of substance use services per 100000"
+
+#table1(~., data = select(final, -County, -FIPS))
+table <- tableby(~., data = select(final, -County, -FIPS))
+summary(table)
+```
+
